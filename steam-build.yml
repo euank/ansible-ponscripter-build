@@ -1,0 +1,39 @@
+---
+- hosts: steam_ponscripter_build
+  user: root
+  vars_files:
+    - vars.yml
+  tasks:
+    - name: Install needed packages
+      apt: state=present name={{ item }}
+      with_items:
+        - git
+        - build-essential
+        - automake
+        - unzip
+    - name: Download the steam runtime
+      get_url: url=http://media.steampowered.com/client/runtime/steam-runtime-sdk_latest.tar.xz dest=/tmp/steam-runtime-sdk_latest.tar.xz
+    - name: Extract steam runtime
+      command: chdir=/tmp tar xf steam-runtime-sdk_latest.tar.xz
+    - name: Setup steam runtime
+      shell: chdir=/tmp cd steam-runtime-sdk_*; ./setup.sh --target=i386 --release --auto-update
+    - name: Clone ponscripter repo
+      git: repo=https://github.com/sekaiproject/ponscripter-fork.git dest=/tmp/ponscripter-fork version={{ pons_branch }}
+    - name: Download steam api
+      get_url: url={{private_steam_api}} dest=/tmp/steamworks_sdk.zip
+    - name: Extract steam api
+      command: chdir=/tmp unzip steamworks_sdk.zip creates=/tmp/sdk
+    - name: Mv steam api into pons
+      shell: mv /tmp/sdk/{{ item }} /tmp/ponscripter-fork/src/extlib/src/steam-sdk/{{ item }} creates=/tmp/ponscripter-fork/src/extlib/src/steam-sdk/{{ item }}
+      with_items:
+        - public
+        - redistributable_bin
+    - name: Fix timestamps ;_;
+      shell: chdir=/tmp/ponscripter-fork/src/extlib/src/SDL2_image-2.0.0/ bash fix-timestamps.sh
+    - name: Configure
+      shell: chdir=/tmp/ponscripter-fork /tmp/steam-runtime-sdk_*/shell-i386.sh run.sh ./configure --game=narci2 --steam --with-external-sdl-mixer creates=/tmp/ponscripter-fork/Makefile
+    - name: Make
+      shell: chdir=/tmp/ponscripter-fork /tmp/steam-runtime-sdk_*/shell-i386.sh run.sh make creates=/tmp/ponscripter-fork/src/narcissu2
+    - name: Fetch it
+      fetch: src=/tmp/ponscripter-fork/src/narcissu2 flat dest=bin/
+
